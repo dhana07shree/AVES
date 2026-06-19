@@ -1,7 +1,6 @@
 # AVES Interface Agreement
 
 Detection Output:
-
 {
 "glare_mask": glare_mask,
 "dark_mask": dark_mask,
@@ -10,18 +9,13 @@ Detection Output:
 
 
 
-
 Enhancement Input:
-
 frame,
 glare_mask,
 dark_mask
 
 Enhancement Output:
-
 enhanced_frame
-
-
 
 
 
