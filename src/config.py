@@ -1,63 +1,45 @@
+
 """
-AVES Configuration File
-All configurable parameters for the project.
+AVES configuration.
+
+This version is tuned for an edge-AI hackathon demo: strong visual recovery,
+minimal clutter, CPU-friendly defaults, and clean output videos.
 """
 
 import os
 
-# --------------------------------------------------
-# Project Directories
-# --------------------------------------------------
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 DATA_DIR = os.path.join(BASE_DIR, "data")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 DAY_VIDEO = os.path.join(DATA_DIR, "day_samples", "sample.mp4")
 NIGHT_VIDEO = os.path.join(DATA_DIR, "night_samples", "sample.mp4")
-
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-
-# --------------------------------------------------
-# Display Settings
-# --------------------------------------------------
+DEFAULT_VIDEO = NIGHT_VIDEO
 
 WINDOW_NAME = "AVES - Adaptive Vision Enhancement System"
-
-FRAME_WIDTH = 1280
-FRAME_HEIGHT = 720
-
-SHOW_FPS = True
-
-# --------------------------------------------------
-# Video Settings
-# --------------------------------------------------
-
-DEFAULT_VIDEO = DAY_VIDEO
-
-# ESC key
 EXIT_KEY = 27
 
-# --------------------------------------------------
-# Enhancement Parameters
-# (Used later)
-# --------------------------------------------------
+PROCESS_WIDTH = 640
+PROCESS_HEIGHT = 360
+DISPLAY_WIDTH = 1280
+DISPLAY_HEIGHT = 360
 
-GLARE_THRESHOLD = 230
+SAVE_COMPARISON_VIDEO = True
+SAVE_ENHANCED_VIDEO = True
+SHOW_PREVIEW = True
 
-DARK_THRESHOLD = 65
+OUTPUT_COMPARISON = os.path.join(OUTPUT_DIR, "comparison.mp4")
+OUTPUT_ENHANCED = os.path.join(OUTPUT_DIR, "enhanced.mp4")
 
-CLAHE_CLIP_LIMIT = 2.5
-
-CLAHE_GRID_SIZE = (8, 8)
-
-GAMMA = 1.6
-
-# --------------------------------------------------
-# YOLO Settings
-# (Later)
-# --------------------------------------------------
-
-YOLO_MODEL = "yolov8n.pt"
-
+YOLO_MODEL = os.path.join(BASE_DIR, "yolov8n.pt")
 CONFIDENCE_THRESHOLD = 0.35
+ENABLE_DETECTION = True
+DETECT_EVERY_N_FRAMES = 2
+
+EDGE_MODE = True
+
+CLAHE_CLIP_LIMIT = 2.0
+CLAHE_GRID_SIZE = (8, 8)
+GLARE_VALUE_THRESHOLD = 228
+HEADLIGHT_VALUE_THRESHOLD = 238
+DARK_THRESHOLD = 75

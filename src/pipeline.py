@@ -1,175 +1,115 @@
+
 """
-pipeline.py
-
-Core video processing pipeline for AVES.
-Every frame passes through this class.
-
-Future Flow:
-
-Capture Frame
-      │
-      ▼
-Object Detection
-      │
-      ▼
-Day/Night Detection
-      │
-      ▼
-Image Enhancement
-      │
-      ▼
-Output Rendering
+Main AVES video pipeline.
 """
 
-import cv2
 import time
-import numpy as np
+import cv2
 
 import src.config as config
+from src.scene_analyzer import SceneAnalyzer
+from src.enhancement import ImageEnhancer
+from src.detect import ObjectDetector
+from src.output import OutputManager
+from src.hazard import HazardDetector
 
 
 class VideoPipeline:
-
     def __init__(self, source=config.DEFAULT_VIDEO):
-
         self.source = source
-
         self.cap = cv2.VideoCapture(source)
 
         if not self.cap.isOpened():
-            raise Exception(f"Cannot open video source:\n{source}")
-
-        self.prev_time = time.time()
-
-        self.frame_count = 0
-
-        self.fps = 0
-
-        print("Video Pipeline Initialized Successfully")
-
-    # ----------------------------------------------------
-
-    def calculate_fps(self):
-
-        current_time = time.time()
-
-        self.fps = 1 / (current_time - self.prev_time)
-
-        self.prev_time = current_time
-
-    # ----------------------------------------------------
-
-    def preprocess_frame(self, frame):
-
-        """
-        Reserved for future resizing,
-        color conversion etc.
-        """
-
-        frame = cv2.resize(
-            frame,
-            (config.FRAME_WIDTH, config.FRAME_HEIGHT)
-        )
-
-        return frame
-
-    # ----------------------------------------------------
-
-    def process_frame(self, frame):
-
-        """
-        Complete processing pipeline.
-
-        Later this function will call:
-
-        detect.py
-
-        glare.py
-
-        nightmode.py
-
-        enhance.py
-        """
-
-        processed_frame = frame.copy()
-
-        return processed_frame
-
-    # ----------------------------------------------------
-
-    def draw_information(self, frame):
-
-        if config.SHOW_FPS:
-
-            cv2.putText(
-                frame,
-                f"FPS : {int(self.fps)}",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2
+            raise FileNotFoundError(
+                f"Unable to open video source: {source}. "
+                "Put your test video in data/day_samples/sample.mp4 or change DEFAULT_VIDEO."
             )
 
-        cv2.putText(
+        self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.video_fps <= 0:
+            self.video_fps = 30
+
+        self.scene = SceneAnalyzer()
+        self.enhancer = ImageEnhancer()
+        self.detector = ObjectDetector()
+        self.hazard = HazardDetector()
+        self.output = OutputManager()
+
+        self.prev_time = time.time()
+        self.fps = 0.0
+        self.frame_index = 0
+        self.last_detection = None
+
+        self.output.initialize_writer(config.PROCESS_WIDTH, config.PROCESS_HEIGHT, self.video_fps)
+
+    def calculate_fps(self):
+        now = time.time()
+        delta = max(1e-6, now - self.prev_time)
+        instant = 1.0 / delta
+        self.fps = instant if self.fps == 0 else (0.85 * self.fps + 0.15 * instant)
+        self.prev_time = now
+
+    def resize_frame(self, frame):
+        return cv2.resize(
             frame,
-            "AVES",
-            (20, 80),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 0),
-            2
+            (config.PROCESS_WIDTH, config.PROCESS_HEIGHT),
+            interpolation=cv2.INTER_AREA,
         )
 
-        return frame
+    def process_frame(self, frame):
+        scene = self.scene.analyze(frame)
+        enhanced = self.enhancer.enhance(frame, scene)
 
-    # ----------------------------------------------------
+        run_detection = (
+            config.ENABLE_DETECTION
+            and self.frame_index % max(1, config.DETECT_EVERY_N_FRAMES) == 0
+        )
 
-    def create_comparison(self, original, processed):
+        if run_detection or self.last_detection is None:
+            detection = self.detector.detect(enhanced)
+            self.last_detection = detection
+        else:
+            detection = self.last_detection
+            detection = {**detection, "frame": enhanced.copy()}
 
-        comparison = np.hstack((original, processed))
+        enhanced = detection["frame"]
+        enhanced = self.hazard.process(enhanced, detection)
+        enhanced = self.hazard.draw_warning(enhanced)
+        enhanced = self.output.draw_dashboard(enhanced, scene, detection, self.fps)
 
+        comparison = self.output.comparison(frame, enhanced)
+        comparison = self.output.draw_labels(comparison)
+        self.output.save(enhanced, comparison)
         return comparison
 
-    # ----------------------------------------------------
-
-    def display_frame(self, frame):
-
-        cv2.imshow(config.WINDOW_NAME, frame)
-
-    # ----------------------------------------------------
+    def prepare_preview(self, frame):
+        return cv2.resize(
+            frame,
+            (config.DISPLAY_WIDTH, config.DISPLAY_HEIGHT),
+            interpolation=cv2.INTER_AREA,
+        )
 
     def run(self):
-
         while True:
-
             ret, frame = self.cap.read()
-
             if not ret:
-                print("End of video.")
                 break
 
             self.calculate_fps()
+            frame = self.resize_frame(frame)
+            output = self.process_frame(frame)
+            self.frame_index += 1
 
-            frame = self.preprocess_frame(frame)
-
-            processed = self.process_frame(frame)
-
-            processed = self.draw_information(processed)
-
-            comparison = self.create_comparison(frame, processed)
-
-            self.display_frame(comparison)
-
-            self.frame_count += 1
-
-            key = cv2.waitKey(1)
-
-            if key == config.EXIT_KEY:
-                break
+            if config.SHOW_PREVIEW:
+                cv2.imshow(config.WINDOW_NAME, self.prepare_preview(output))
+                key = cv2.waitKey(1) & 0xFF
+                if key == config.EXIT_KEY:
+                    break
 
         self.cap.release()
+        self.output.release()
+        if config.SHOW_PREVIEW:
+            cv2.destroyAllWindows()
 
-        cv2.destroyAllWindows()
-
-        print(f"Processed {self.frame_count} frames.")
+        print(f"Enhanced video saved to: {config.OUTPUT_ENHANCED}")
+        print(f"Comparison video saved to: {config.OUTPUT_COMPARISON}")
